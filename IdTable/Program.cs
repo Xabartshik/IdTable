@@ -6,6 +6,35 @@ using System.Diagnostics;
 
 class Program
 {
+    static void InsertDefaultIdentifiers(IIdentifierTable table)
+    {
+        var defaultIdentifiers = new (string name, string kind, string type)[]
+        {
+        ("printf", "func", "void"),
+        ("scanf", "func", "int"),
+        ("a", "var", "pointer"),
+        ("free", "func", "void"),
+        ("strlen", "func", "int"),
+        ("strcmp", "func", "int"),
+        ("i", "var", "int"),
+        ("strcat", "func", "void"),
+        ("main", "func", "void"),
+        ("test", "func", "int")
+        };
+
+        foreach (var (name, kind, type) in defaultIdentifiers)
+        {
+            var entry = new Entry(name)
+            {
+                Kind = kind,
+                Type = type,
+                ScopeLevel = 0
+            };
+            table.Insert(entry);
+        }
+    }
+
+
     static void TestTable(IIdentifierTable table, List<string> identifiers)
     {
         var sw = Stopwatch.StartNew();
@@ -168,6 +197,9 @@ class Program
     static void InteractiveMode()
     {
         IIdentifierTable table = SelectTable();
+        InsertDefaultIdentifiers(table);
+
+
 
         Console.WriteLine("\n=== ИНТЕРАКТИВНЫЙ РЕЖИМ ===");
         Console.WriteLine("Команды:");
@@ -282,33 +314,33 @@ class Program
         Console.WriteLine("=== Лабораторная работа: Таблица идентификаторов ===\n");
 
         // Тестовые данные
-        var testIdentifiers = new List<string>
-        {
-            "alpha", "beta", "gamma", "delta", "epsilon",
-            "zeta", "eta", "theta", "iota", "kappa",
-            "lambda", "mu", "nu", "xi", "omicron",
-            "pi", "rho", "sigma", "tau", "upsilon",
-            "phi", "chi", "psi", "omega", "count",
-            "sum", "average", "total", "index", "value"
-        };
+        //var testIdentifiers = new List<string>
+        //{
+        //    "alpha", "beta", "gamma", "delta", "epsilon",
+        //    "zeta", "eta", "theta", "iota", "kappa",
+        //    "lambda", "mu", "nu", "xi", "omicron",
+        //    "pi", "rho", "sigma", "tau", "upsilon",
+        //    "phi", "chi", "psi", "omega", "count",
+        //    "sum", "average", "total", "index", "value"
+        //};
 
-        Console.WriteLine($"Тестируем с {testIdentifiers.Count} идентификаторами\n");
+        //Console.WriteLine($"Тестируем с {testIdentifiers.Count} идентификаторами\n");
 
-        Console.WriteLine("--- ТЕСТ 1: Хеш-таблица с рехешированием (PRNG) ---");
-        TestTable(new HashTableWithPRNG(32, 42), testIdentifiers);
-        Console.WriteLine("\n" + new string('=', 60) + "\n");
+        //Console.WriteLine("--- ТЕСТ 1: Хеш-таблица с рехешированием (PRNG) ---");
+        //TestTable(new HashTableWithPRNG(32, 42), testIdentifiers);
+        //Console.WriteLine("\n" + new string('=', 60) + "\n");
 
-        Console.WriteLine("--- ТЕСТ 2: Хеш-таблица с цепочками ---");
-        TestTable(new HashTableWithChaining(32), testIdentifiers);
-        Console.WriteLine("\n" + new string('=', 60) + "\n");
+        //Console.WriteLine("--- ТЕСТ 2: Хеш-таблица с цепочками ---");
+        //TestTable(new HashTableWithChaining(32), testIdentifiers);
+        //Console.WriteLine("\n" + new string('=', 60) + "\n");
 
-        Console.WriteLine("--- ТЕСТ 3: Простой список ---");
-        TestTable(new SimpleListTable(), testIdentifiers);
-        Console.WriteLine("\n" + new string('=', 60) + "\n");
+        //Console.WriteLine("--- ТЕСТ 3: Простой список ---");
+        //TestTable(new SimpleListTable(), testIdentifiers);
+        //Console.WriteLine("\n" + new string('=', 60) + "\n");
 
-        PerformanceComparison();
+        //PerformanceComparison();
 
-        Console.WriteLine("\n" + new string('=', 60) + "\n");
+        //Console.WriteLine("\n" + new string('=', 60) + "\n");
 
         // Интерактивный режим
         InteractiveMode();
