@@ -9,18 +9,52 @@ namespace IdTable
     public class Entry
     {
         public string Name { get; init; } = "";
-        public string Kind { get; init; } = "var";   // var/func/type/param/const
-        public string Type { get; set; } = "int";    // ссылка на дескриптор типа/идентификатор типа
-        public int ScopeLevel { get; init; } // уровень области
+        public string Kind { get; init; } = "var"; // var/func/type/param/const
+        public string Type { get; set; } = "int"; // ссылка на дескриптор типа/идентификатор типа
+        public string Address { get; set; } = "-1"; // позиция в таблице идентификаторов (адрес_в_таблице или адрес_в_таблице.адрес_в_бакете)
 
         public Entry(string name)
-        { this.Name = name; }
+        {
+            this.Name = name;
+        }
+    }
+
+    /// <summary>
+    /// Статистика качества генератора ПСЧ
+    /// </summary>
+    public class PRNGQualityStats
+    {
+        public string GeneratorName { get; set; }
+        public int SampleSize { get; set; }
+        public double Min { get; set; }
+        public double Max { get; set; }
+        public double Mean { get; set; }
+        public double Median { get; set; }
+        public double StdDev { get; set; }
+        public double Variance { get; set; }
+        public double Skewness { get; set; }
+        public double Kurtosis { get; set; }
+        public double ChiSquareStatistic { get; set; }
+        public double UniformityScore { get; set; } // 0-100, чем выше - тем лучше
+        public double CorrelationCoefficient { get; set; } // корреляция между соседними значениями
+        public double EntropyEstimate { get; set; } // оценка энтропии
+        public Dictionary<int, int> BucketDistribution { get; set; } = new();
     }
 
     /// <summary>
     /// Реализация генератора псевдослучайных чисел на основе ЛКГ (Линейный конгруэнтный генератор).
     /// </summary>
-    public class PRNG
+    public abstract class PRNGBase
+    {
+        public abstract int Next();
+        public abstract int Next(int maxValue);
+        public abstract int Next(int minValue, int maxValue);
+        public abstract double NextDouble();
+        public abstract float NextSingle();
+        public abstract void NextBytes(byte[] buffer);
+    }
+
+    public class PRNG : PRNGBase
     {
         private long _seed;
         private long _lastValue;
@@ -31,7 +65,6 @@ namespace IdTable
         private const long a = 25214903917L;
         private const long c = 11L;
         private const long m = (1L << 48) - 1; // Маска для 48 бит (2^48 - 1)
-
         private const uint _j = 24;
         private const uint _k = 55;
 
@@ -39,6 +72,7 @@ namespace IdTable
         private ulong _pcgState;
         private const ulong PCG_MULTIPLIER = 6364136223846793005UL;
         private const ulong PCG_INCREMENT = 1442695040888963407UL;
+
         /// <summary>
         /// Инициализирует новый экземпляр генератора.
         /// </summary>
@@ -46,13 +80,16 @@ namespace IdTable
         public PRNG(long? seed = null)
         {
             if (seed != null)
-            { _seed = seed.Value; }
+            {
+                _seed = seed.Value;
+            }
             else
             {
                 long processId = Environment.ProcessId;
                 long ticks = DateTime.Now.Ticks;
                 _seed = processId ^ (int)ticks;
             }
+
             _pcgState = (ulong)_seed + PCG_INCREMENT;
             NextRawPCG();
             _index = (uint)(this.NextRawPCG() % _k);
@@ -62,28 +99,23 @@ namespace IdTable
             {
                 _lastValues.Add(this.NextRawPCG());
             }
-
         }
 
         private int NextRawAdditive()
         {
             long jIndex = (_index - _j + _k) % _k;
             long kIndex = (_index + _j - _k) % _j;
-
             uint nextValue = _lastValues[(int)jIndex] + _lastValues[(int)kIndex];
             _lastValues[(int)_index] = nextValue;
             _index = (_index + 1) % _k;
-
             return unchecked((int)nextValue);
         }
-
 
         // Шаг PCG: обновление состояния + перемешивающая функция
         private uint NextRawPCG()
         {
             ulong oldState = _pcgState;
             _pcgState = oldState * PCG_MULTIPLIER + PCG_INCREMENT;
-
             // Перемешивающая функция XSH-RR
             uint xorshifted = (uint)(((oldState >> 18) ^ oldState) >> 27);
             int rot = (int)(oldState >> 59);
@@ -96,21 +128,17 @@ namespace IdTable
             int pcgValue = (int)NextRawPCG();
             int additiveValue = NextRawAdditive();
             int state = pcgValue ^ additiveValue;
-
             //Операция перемешивания: в интернете сказали, что хорошо вносит энтропию
             state ^= (int)((uint)state >> 17);
             state ^= state << 31;
             state ^= (int)((uint)state >> 8);
-
             return (int)(state & 0xFFFFFFFF);
         }
-
-
 
         /// <summary>
         /// Возвращает неотрицательное (0-31) случайное целое число.
         /// </summary>
-        public int Next()
+        public override int Next()
         {
             return NextRaw() & 0x7FFFFFFF;
         }
@@ -118,7 +146,7 @@ namespace IdTable
         /// <summary>
         /// Возвращает случайное целое число, которое меньше указанного максимального значения.
         /// </summary>
-        public int Next(int maxValue)
+        public override int Next(int maxValue)
         {
             if (maxValue < 0)
                 throw new ArgumentOutOfRangeException(nameof(maxValue), "maxValue должен быть неотрицательным.");
@@ -128,31 +156,21 @@ namespace IdTable
         /// <summary>
         /// Возвращает случайное целое число в указанном диапазоне.
         /// </summary>
-        public int Next(int minValue, int maxValue)
+        public override int Next(int minValue, int maxValue)
         {
             if (minValue > maxValue)
                 throw new ArgumentOutOfRangeException(nameof(minValue), "minValue не может быть больше maxValue.");
-
             long range = (long)maxValue - minValue;
             if (range == 0) return minValue;
-
             return (int)(minValue + (NextDouble() * range));
         }
 
-        public double NextDouble()
+        public override double NextDouble()
         {
             // Используем полные 32 бита из NextRaw() напрямую (без потери энтропии)
-            ulong hi = (ulong)(uint)NextRaw() << 21;  // Биты 52-21 (32 бита)
-
+            ulong hi = (ulong)(uint)NextRaw() << 21; // Биты 52-21 (32 бита)
             // Используем младшие 21 бит из второго вызова
-            ulong lo = (ulong)(uint)NextRaw() & ((1UL << 21) - 1);  // Биты 20-0 (21 бит)
-
-            // Вывод в двоичной форме
-            //Console.WriteLine($"hi:  {ToBinary64(hi)}");
-            //Console.WriteLine($"lo:  {ToBinary64(lo)}");
-            //Console.WriteLine($"OR:  {ToBinary64(hi | lo)}");
-            //Console.WriteLine($"53:  {ToBinary64(1UL << 53)}");
-            //Console.WriteLine();
+            ulong lo = (ulong)(uint)NextRaw() & ((1UL << 21) - 1); // Биты 20-0 (21 бит)
             ulong bits53 = hi | lo;
             return (double)bits53 / (double)(1UL << 53);
         }
@@ -163,8 +181,8 @@ namespace IdTable
             var ci = CultureInfo.InvariantCulture;
             for (int i = 0; i < 1_000_000; i++)
             {
-                double x = NextDouble();                 // ожидается в [0,1)
-                sw.WriteLine(x.ToString("R", ci));       // формат "R" для полной точности double
+                double x = NextDouble(); // ожидается в [0,1)
+                sw.WriteLine(x.ToString("R", ci)); // формат "R" для полной точности double
             }
         }
 
@@ -174,14 +192,13 @@ namespace IdTable
             uint upper = (uint)(value >> 32);
             uint lower = (uint)(value & 0xFFFFFFFF);
             return Convert.ToString(upper, 2).PadLeft(32, '0') +
-                   Convert.ToString(lower, 2).PadLeft(32, '0');
+                Convert.ToString(lower, 2).PadLeft(32, '0');
         }
-
 
         /// <summary>
         /// Возвращает случайное число с плавающей запятой в диапазоне [0.0f, 1.0f).
         /// </summary>
-        public float NextSingle()
+        public override float NextSingle()
         {
             return (float)NextDouble();
         }
@@ -189,13 +206,57 @@ namespace IdTable
         /// <summary>
         /// Заполняет элементы указанного массива байтов случайными числами.
         /// </summary>
-        public void NextBytes(byte[] buffer)
+        public override void NextBytes(byte[] buffer)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
             for (int i = 0; i < buffer.Length; i++)
             {
                 buffer[i] = (byte)Next(256); // Генерируем число от 0 до 255
             }
+        }
+    }
+
+    // Адаптер для использования System.Random как PRNG
+    public class SystemRandomAdapter : PRNGBase
+    {
+        private readonly Random _random;
+
+        public SystemRandomAdapter(long? seed = null)
+        {
+            if (seed != null)
+                _random = new Random((int)(seed.Value & 0xFFFFFFFF));
+            else
+                _random = new Random();
+        }
+
+        public override int Next()
+        {
+            return _random.Next();
+        }
+
+        public override int Next(int maxValue)
+        {
+            return _random.Next(maxValue);
+        }
+
+        public override int Next(int minValue, int maxValue)
+        {
+            return _random.Next(minValue, maxValue);
+        }
+
+        public override double NextDouble()
+        {
+            return _random.NextDouble();
+        }
+
+        public override float NextSingle()
+        {
+            return (float)_random.NextDouble();
+        }
+
+        public override void NextBytes(byte[] buffer)
+        {
+            _random.NextBytes(buffer);
         }
     }
 
@@ -207,6 +268,7 @@ namespace IdTable
         bool Insert(Entry entry);
         Entry? Search(string name);
         bool Delete(string name);
+        bool DeleteByPosition(int position);
         int Count { get; }
         void PrintStatistics();
     }
@@ -226,7 +288,7 @@ namespace IdTable
         private Slot[] _table;
         private int _count;
         private int _capacity;
-        private readonly PRNG _prng;
+        private readonly PRNGBase _prng;
         private const double LOAD_FACTOR_THRESHOLD = 0.7;
 
         // Статистика для анализа
@@ -237,16 +299,20 @@ namespace IdTable
 
         public int Count => _count;
 
-        public HashTableWithPRNG(int initialCapacity = 128, long? seed = null)
+        public HashTableWithPRNG(int initialCapacity = 128, long? seed = null, PRNGBase? prngInstance = null)
         {
             // Размер таблицы - степень двойки для эффективности
             _capacity = GetNextPowerOfTwo(initialCapacity);
             _table = new Slot[_capacity];
             for (int i = 0; i < _capacity; i++)
                 _table[i] = new Slot();
-
             _count = 0;
-            _prng = new PRNG(seed);
+
+            // Используем переданный PRNG или создаём PRNG по умолчанию
+            if (prngInstance != null)
+                _prng = prngInstance;
+            else
+                _prng = new PRNG(seed);
         }
 
         private int GetNextPowerOfTwo(int n)
@@ -262,7 +328,6 @@ namespace IdTable
         private int Hash(string key)
         {
             if (string.IsNullOrEmpty(key)) return 0;
-
             int hash = 0;
             foreach (char c in key)
             {
@@ -278,8 +343,7 @@ namespace IdTable
         {
             // Создаем новый генератор с сидом на основе ключа для детерминированности
             int keySeed = key.GetHashCode();
-            PRNG localPrng = new PRNG(keySeed);
-
+            PRNGBase localPrng = _prng is PRNG ? new PRNG(keySeed) : new SystemRandomAdapter(keySeed);
             HashSet<int> visited = new HashSet<int>();
             int baseHash = Hash(key);
 
@@ -315,7 +379,6 @@ namespace IdTable
             {
                 probeCount++;
                 _totalProbes++;
-
                 var slot = _table[index];
 
                 // Нашли пустое место или удалённый слот
@@ -323,12 +386,11 @@ namespace IdTable
                 {
                     slot.Entry = entry;
                     slot.IsDeleted = false;
+                    entry.Address = index.ToString(); // Устанавливаем адрес
                     _count++;
                     _insertions++;
-
                     if (probeCount > 1)
                         _collisions++;
-
                     return true;
                 }
 
@@ -336,6 +398,7 @@ namespace IdTable
                 if (slot.Entry.Name == entry.Name)
                 {
                     slot.Entry = entry; // Обновляем
+                    entry.Address = index.ToString();
                     return true;
                 }
             }
@@ -354,7 +417,6 @@ namespace IdTable
             {
                 probeCount++;
                 _totalProbes++;
-
                 var slot = _table[index];
 
                 if (slot.IsOccupied && !slot.IsDeleted && slot.Entry.Name == name)
@@ -380,7 +442,6 @@ namespace IdTable
             foreach (int index in GetProbeSequence(name))
             {
                 var slot = _table[index];
-
                 if (slot.IsOccupied && !slot.IsDeleted && slot.Entry.Name == name)
                 {
                     slot.IsDeleted = true;
@@ -395,15 +456,29 @@ namespace IdTable
             return false;
         }
 
+        public bool DeleteByPosition(int position)
+        {
+            if (position < 0 || position >= _capacity)
+                return false;
+
+            var slot = _table[position];
+            if (slot.IsOccupied && !slot.IsDeleted)
+            {
+                slot.IsDeleted = true;
+                _count--;
+                return true;
+            }
+
+            return false;
+        }
+
         private void Resize()
         {
             var oldTable = _table;
             _capacity *= 2;
             _table = new Slot[_capacity];
-
             for (int i = 0; i < _capacity; i++)
                 _table[i] = new Slot();
-
             _count = 0;
 
             // Перехешируем все элементы
@@ -418,7 +493,7 @@ namespace IdTable
 
         public void PrintStatistics()
         {
-            Console.WriteLine($"\n=== Статистика хеш-таблицы с PRNG ===");
+            Console.WriteLine($"\n=== Статистика хеш-таблицы с PRNG ({_prng.GetType().Name}) ===");
             Console.WriteLine($"Размер таблицы: {_capacity}");
             Console.WriteLine($"Элементов: {_count}");
             Console.WriteLine($"Коэффициент загрузки: {(double)_count / _capacity:F3}");
@@ -426,7 +501,6 @@ namespace IdTable
             Console.WriteLine($"Поисков: {_searches}");
             Console.WriteLine($"Коллизий: {_collisions}");
             Console.WriteLine($"Всего проб: {_totalProbes}");
-
             if (_insertions + _searches > 0)
             {
                 double avgProbes = (double)_totalProbes / (_insertions + _searches);
@@ -466,12 +540,14 @@ namespace IdTable
                 if (_list[i].Name == entry.Name)
                 {
                     _list[i] = entry; // Обновляем
+                    entry.Address = i.ToString();
                     _insertions++;
                     return true;
                 }
             }
 
             // Добавляем новый
+            entry.Address = _list.Count.ToString();
             _list.Add(entry);
             _insertions++;
             return true;
@@ -514,6 +590,15 @@ namespace IdTable
             return false;
         }
 
+        public bool DeleteByPosition(int position)
+        {
+            if (position < 0 || position >= _list.Count)
+                return false;
+
+            _list.RemoveAt(position);
+            return true;
+        }
+
         public void PrintStatistics()
         {
             Console.WriteLine($"\n=== Статистика простого списка ===");
@@ -521,7 +606,6 @@ namespace IdTable
             Console.WriteLine($"Вставок: {_insertions}");
             Console.WriteLine($"Поисков: {_searches}");
             Console.WriteLine($"Всего сравнений: {_totalComparisons}");
-
             if (_insertions + _searches > 0)
             {
                 double avgComparisons = (double)_totalComparisons / (_insertions + _searches);
@@ -530,9 +614,6 @@ namespace IdTable
         }
     }
 
-    /// <summary>
-    /// Таблица идентификаторов с открытой адресацией и использованием массива для разрешения проблем с адресацией
-    /// </summary>
     /// <summary>
     /// Таблица идентификаторов с методом цепочек (separate chaining) на основе массива вёдер
     /// </summary>
@@ -572,7 +653,6 @@ namespace IdTable
         private int Hash(string key)
         {
             if (string.IsNullOrEmpty(key)) return 0;
-
             int hash = 0;
             foreach (char c in key)
             {
@@ -592,24 +672,24 @@ namespace IdTable
                 Resize();
             }
 
-            int index = Hash(entry.Name);
+            int bucketIndex = Hash(entry.Name);
             _totalProbes++;
 
             // Инициализируем ведро, если оно ещё не создано
-            if (_buckets[index] == null)
+            if (_buckets[bucketIndex] == null)
             {
-                _buckets[index] = new LinkedList<Entry>();
+                _buckets[bucketIndex] = new LinkedList<Entry>();
             }
 
-            var bucket = _buckets[index];
+            var bucket = _buckets[bucketIndex];
             int probeCount = 0;
 
             // Проверяем, существует ли уже элемент с таким ключом
+            int positionInBucket = 0;
             foreach (var existingEntry in bucket)
             {
                 probeCount++;
                 _totalProbes++;
-
                 if (existingEntry.Name == entry.Name)
                 {
                     // Обновляем существующий элемент
@@ -617,13 +697,17 @@ namespace IdTable
                     if (node != null)
                     {
                         node.Value = entry;
+                        entry.Address = $"{bucketIndex}.{positionInBucket}";
                     }
+
                     return true;
                 }
+                positionInBucket++;
             }
 
             // Добавляем новый элемент в цепочку
             bucket.AddLast(entry);
+            entry.Address = $"{bucketIndex}.{positionInBucket}"; // адрес_в_таблице.адрес_в_бакете
             _count++;
             _insertions++;
 
@@ -641,11 +725,11 @@ namespace IdTable
             if (string.IsNullOrEmpty(name))
                 return null;
 
-            int index = Hash(name);
+            int bucketIndex = Hash(name);
             _totalProbes++;
             _searches++;
 
-            var bucket = _buckets[index];
+            var bucket = _buckets[bucketIndex];
             if (bucket == null)
                 return null;
 
@@ -653,7 +737,6 @@ namespace IdTable
             foreach (var entry in bucket)
             {
                 _totalProbes++;
-
                 if (entry.Name == name)
                 {
                     return entry;
@@ -668,8 +751,8 @@ namespace IdTable
             if (string.IsNullOrEmpty(name))
                 return false;
 
-            int index = Hash(name);
-            var bucket = _buckets[index];
+            int bucketIndex = Hash(name);
+            var bucket = _buckets[bucketIndex];
 
             if (bucket == null)
                 return false;
@@ -688,16 +771,29 @@ namespace IdTable
             return false;
         }
 
+        public bool DeleteByPosition(int position)
+        {
+            if (position < 0 || position >= _capacity)
+                return false;
+
+            var bucket = _buckets[position];
+            if (bucket != null && bucket.Count > 0)
+            {
+                _count -= bucket.Count;
+                _buckets[position] = null;
+                return true;
+            }
+
+            return false;
+        }
+
         private void Resize()
         {
             var oldBuckets = _buckets;
             int oldCapacity = _capacity;
-
             _capacity *= 2;
             _buckets = new LinkedList<Entry>[_capacity];
             _count = 0;
-
-
             int oldInsertions = _insertions;
             int oldCollisions = _collisions;
 
@@ -713,7 +809,6 @@ namespace IdTable
                 }
             }
 
-
             _insertions = oldInsertions;
             _collisions = oldCollisions;
         }
@@ -728,7 +823,6 @@ namespace IdTable
             Console.WriteLine($"Поисков: {_searches}");
             Console.WriteLine($"Коллизий: {_collisions}");
             Console.WriteLine($"Всего проб: {_totalProbes}");
-
             if (_insertions + _searches > 0)
             {
                 double avgProbes = (double)_totalProbes / (_insertions + _searches);
@@ -760,14 +854,10 @@ namespace IdTable
             Console.WriteLine($"Пустых вёдер: {emptyBuckets}");
             Console.WriteLine($"Заполненных вёдер: {nonEmptyBuckets}");
             Console.WriteLine($"Максимальная длина цепочки: {maxChainLength}");
-
             if (nonEmptyBuckets > 0)
             {
                 Console.WriteLine($"Средняя длина цепочки: {totalChainLength / nonEmptyBuckets:F2}");
             }
         }
     }
-
-
 }
-
