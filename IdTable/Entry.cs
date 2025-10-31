@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-
+// https://colab.research.google.com/drive/1M8dLB9jJ7lFYfSgWEy4dWfPk9sCZpOZr#scrollTo=1GYTtW5Z26It
 namespace IdTable
 {
     public class Entry

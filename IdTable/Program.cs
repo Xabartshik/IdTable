@@ -14,27 +14,28 @@ class Program
     {
         var defaultIdentifiers = new (string name, string kind, string type)[]
         {
-            ("printf", "func", "void"),
-            ("scanf", "func", "int"),
-            ("a", "var", "int"),
-            ("free", "func", "void"),
-            ("strlen", "func", "int"),
-            ("strcmp", "func", "int"),
-            ("i", "var", "float"),
-            ("strcat", "func", "void"),
-            ("main", "func", "void"),
-            ("test", "func", "int"),
-            ("x", "var", "double"),
-            ("y", "var", "char"),
-            ("z", "var", "long"),
-            ("arr", "var", "pointer"),
-            ("malloc", "func", "pointer"),
-            ("memset", "func", "void"),
-            ("j", "var", "short"),
-            ("k", "var", "unsigned int"),
-            ("tmp", "var", "bool"),
-            ("buffer", "var", "pointer")
+            ("a", "const", "void"),
+            ("b", "const", "int"),
+            ("c", "var", "int"),
+            ("d", "const", "void"),
+            ("e", "const", "int"),
+            ("f", "const", "int"),
+            ("g", "var", "float"),
+            ("h", "const", "void"),
+            ("i", "const", "void"),
+            ("j", "const", "int"),
+            ("k", "var", "double"),
+            ("l", "var", "char"),
+            ("m", "var", "long"),
+            ("n", "var", "pointer"),
+            ("o", "const", "pointer"),
+            ("p", "const", "void"),
+            ("q", "var", "short"),
+            ("r", "var", "unsigned int"),
+            ("s", "var", "bool"),
+            ("t", "var", "pointer")
         };
+
 
         foreach (var (name, kind, type) in defaultIdentifiers)
         {
@@ -47,281 +48,30 @@ class Program
         }
     }
 
-    static void TestTable(IIdentifierTable table, List<string> identifiers)
-    {
-        var sw = Stopwatch.StartNew();
-
-        // Вставка
-        Console.WriteLine("Вставка элементов...");
-        foreach (var id in identifiers)
-        {
-            var entry = new Entry(id)
-            {
-                Kind = "var",
-                Type = "int"
-            };
-            table.Insert(entry);
-        }
-
-        Console.WriteLine($"Вставлено {table.Count} элементов");
-
-        // Поиск существующих
-        Console.WriteLine("\nПоиск существующих элементов...");
-        int found = 0;
-        foreach (var id in identifiers)
-        {
-            var result = table.Search(id);
-            if (result != null)
-                found++;
-        }
-        Console.WriteLine($"Найдено: {found}/{identifiers.Count}");
-
-        // Поиск несуществующих
-        Console.WriteLine("\nПоиск несуществующих элементов...");
-        var notExisting = new[] { "notfound1", "notfound2", "notfound3" };
-        foreach (var id in notExisting)
-        {
-            var result = table.Search(id);
-            Console.WriteLine($" '{id}': {(result == null ? "не найден" : "ОШИБКА - найден!")}");
-        }
-
-        // Удаление
-        Console.WriteLine("\nУдаление нескольких элементов...");
-        var toDelete = new[] { "alpha", "gamma", "epsilon" };
-        foreach (var id in toDelete)
-        {
-            bool deleted = table.Delete(id);
-            Console.WriteLine($" '{id}': {(deleted ? "удалён" : "не найден")}");
-        }
-
-        Console.WriteLine($"Осталось элементов: {table.Count}");
-
-        // Проверка, что удалённые не находятся
-        Console.WriteLine("\nПроверка удалённых элементов...");
-        foreach (var id in toDelete)
-        {
-            var result = table.Search(id);
-            Console.WriteLine($" '{id}': {(result == null ? "не найден (верно)" : "ОШИБКА - всё ещё в таблице!")}");
-        }
-
-        sw.Stop();
-        Console.WriteLine($"\nВремя выполнения: {sw.ElapsedMilliseconds} мс");
-        table.PrintStatistics();
-    }
-
-    static PRNGQualityStats AnalyzePRNG(PRNGBase prng, string generatorName, int sampleSize = 100000, int buckets = 10)
-    {
-        var samples = new double[sampleSize];
-
-        // Генерируем выборки
-        for (int i = 0; i < sampleSize; i++)
-        {
-            samples[i] = prng.NextDouble();
-        }
-
-        // Базовая статистика
-        double min = samples.Min();
-        double max = samples.Max();
-        double mean = samples.Average();
-
-        // Медиана
-        Array.Sort(samples);
-        double median = sampleSize % 2 == 0
-            ? (samples[sampleSize / 2 - 1] + samples[sampleSize / 2]) / 2
-            : samples[sampleSize / 2];
-
-        // Стандартное отклонение и дисперсия
-        double variance = samples.Sum(x => (x - mean) * (x - mean)) / sampleSize;
-        double stdDev = Math.Sqrt(variance);
-
-        // Асимметрия (skewness) и эксцесс (kurtosis)
-        double m3 = samples.Sum(x => Math.Pow(x - mean, 3)) / sampleSize;
-        double m4 = samples.Sum(x => Math.Pow(x - mean, 4)) / sampleSize;
-        double skewness = m3 / Math.Pow(stdDev, 3);
-        double kurtosis = (m4 / (stdDev * stdDev * stdDev * stdDev)) - 3; // избыточный эксцесс
-
-        // Chi-square тест на равномерность
-        var bucketCounts = new int[buckets];
-        foreach (var sample in samples)
-        {
-            int bucketIndex = (int)(sample * buckets);
-            if (bucketIndex >= buckets) bucketIndex = buckets - 1;
-            bucketCounts[bucketIndex]++;
-        }
-
-        double expectedPerBucket = (double)sampleSize / buckets;
-        double chiSquare = 0;
-        for (int i = 0; i < buckets; i++)
-        {
-            double diff = bucketCounts[i] - expectedPerBucket;
-            chiSquare += (diff * diff) / expectedPerBucket;
-        }
-
-        // Chi-square p-value (приближение)
-        // Для df=9, критическое значение при α=0.05 это ~16.919
-        double chiSquareNormalized = Math.Min(chiSquare / 20.0, 1.0);
-        double uniformityScore = (1.0 - chiSquareNormalized) * 100.0;
-
-        // Корреляция между соседними значениями
-        double correlation = 0;
-        if (sampleSize > 1)
-        {
-            double cov = 0;
-            for (int i = 0; i < sampleSize - 1; i++)
-            {
-                cov += (samples[i] - mean) * (samples[i + 1] - mean);
-            }
-            cov /= (sampleSize - 1);
-            correlation = cov / variance;
-        }
-
-        // Оценка энтропии (используя распределение по бакетам)
-        double entropy = 0;
-        for (int i = 0; i < buckets; i++)
-        {
-            double p = (double)bucketCounts[i] / sampleSize;
-            if (p > 0)
-            {
-                entropy -= p * Math.Log2(p);
-            }
-        }
-        double entropyScore = (entropy / Math.Log2(buckets)) * 100.0; // нормализуем к максимуму log2(buckets)
-
-        var stats = new PRNGQualityStats
-        {
-            GeneratorName = generatorName,
-            SampleSize = sampleSize,
-            Min = min,
-            Max = max,
-            Mean = mean,
-            Median = median,
-            StdDev = stdDev,
-            Variance = variance,
-            Skewness = skewness,
-            Kurtosis = kurtosis,
-            ChiSquareStatistic = chiSquare,
-            UniformityScore = uniformityScore,
-            CorrelationCoefficient = correlation,
-            EntropyEstimate = entropyScore,
-            BucketDistribution = bucketCounts.Select((count, idx) => new { idx, count })
-                .ToDictionary(x => x.idx, x => x.count)
-        };
-
-        return stats;
-    }
-
-    static void PrintPRNGAnalysis(PRNGQualityStats stats)
-    {
-        Console.WriteLine($"\n╔══════════════════════════════════════════════════════════════════════════════╗");
-        Console.WriteLine($"║                    АНАЛИЗ КАЧЕСТВА ГЕНЕРАТОРА: {stats.GeneratorName,-33} ║");
-        Console.WriteLine($"╚══════════════════════════════════════════════════════════════════════════════╝");
-
-        Console.WriteLine($"\n📊 БАЗОВАЯ СТАТИСТИКА ({stats.SampleSize} выборок):");
-        Console.WriteLine($"  Минимум:              {stats.Min:F8}");
-        Console.WriteLine($"  Максимум:             {stats.Max:F8}");
-        Console.WriteLine($"  Среднее:              {stats.Mean:F8}");
-        Console.WriteLine($"  Медиана:              {stats.Median:F8}");
-
-        Console.WriteLine($"\n📈 РАСПРЕДЕЛЕНИЕ:");
-        Console.WriteLine($"  Дисперсия:            {stats.Variance:F8}");
-        Console.WriteLine($"  Стандартное отклон.:  {stats.StdDev:F8}");
-        Console.WriteLine($"  Асимметрия (S):       {stats.Skewness:F6} (идеал: ~0)");
-        Console.WriteLine($"  Эксцесс (K):          {stats.Kurtosis:F6} (идеал: ~0)");
-
-        Console.WriteLine($"\n🧪 ТЕСТЫ КАЧЕСТВА:");
-        Console.WriteLine($"  Chi-square статистика: {stats.ChiSquareStatistic:F2}");
-        Console.WriteLine($"  Оценка равномерности: {stats.UniformityScore:F2}% ✓" +
-            (stats.UniformityScore >= 80 ? " ХОРОШО" : stats.UniformityScore >= 60 ? " ПРИЕМЛЕМО" : " ПЛОХО"));
-        Console.WriteLine($"  Автокорреляция:       {stats.CorrelationCoefficient:F6} (идеал: ~0)");
-        Console.WriteLine($"  Энтропия:             {stats.EntropyEstimate:F2}% " +
-            (stats.EntropyEstimate >= 90 ? "✓ ОТЛИЧНАЯ" : stats.EntropyEstimate >= 75 ? "✓ ХОРОШАЯ" : "⚠ СРЕДНЯЯ"));
-
-        Console.WriteLine($"\n📊 РАСПРЕДЕЛЕНИЕ ПО БАКЕТАМ:");
-        for (int i = 0; i < 10; i++)
-        {
-            if (stats.BucketDistribution.ContainsKey(i))
-            {
-                int count = stats.BucketDistribution[i];
-                double percentage = (count * 100.0) / stats.SampleSize;
-                string bar = new string('█', (int)(percentage / 2));
-                Console.WriteLine($"  [{i}] {bar,25} {percentage:F2}% ({count})");
-            }
-        }
-    }
-
-    static void ComparePRNGGenerators()
-    {
-        Console.WriteLine("\n╔════════════════════════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                   СРАВНЕНИЕ КАЧЕСТВА ГЕНЕРАТОРОВ ПСЧ                            ║");
-        Console.WriteLine("╚════════════════════════════════════════════════════════════════════════════════╝");
-
-        int sampleSize = 100000;
-
-        // Анализ кастомного PRNG
-        var customPrng = new PRNG(42);
-        var customStats = AnalyzePRNG(customPrng, "Кастомный PRNG", sampleSize);
-        PrintPRNGAnalysis(customStats);
-
-        // Анализ System.Random
-        var systemRandom = new SystemRandomAdapter(42);
-        var systemStats = AnalyzePRNG(systemRandom, "System.Random", sampleSize);
-        PrintPRNGAnalysis(systemStats);
-
-        // Сравнение и рекомендации
-        Console.WriteLine($"\n╔════════════════════════════════════════════════════════════════════════════════╗");
-        Console.WriteLine($"║                            ИТОГОВОЕ СРАВНЕНИЕ                                  ║");
-        Console.WriteLine($"╚════════════════════════════════════════════════════════════════════════════════╝");
-
-        Console.WriteLine($"\nЛучше по равномерности:");
-        if (customStats.UniformityScore > systemStats.UniformityScore)
-            Console.WriteLine($"  ✓ Кастомный PRNG: {customStats.UniformityScore:F2}% vs {systemStats.UniformityScore:F2}%");
-        else
-            Console.WriteLine($"  ✓ System.Random: {systemStats.UniformityScore:F2}% vs {customStats.UniformityScore:F2}%");
-
-        Console.WriteLine($"\nЛучше по энтропии:");
-        if (customStats.EntropyEstimate > systemStats.EntropyEstimate)
-            Console.WriteLine($"  ✓ Кастомный PRNG: {customStats.EntropyEstimate:F2}% vs {systemStats.EntropyEstimate:F2}%");
-        else
-            Console.WriteLine($"  ✓ System.Random: {systemStats.EntropyEstimate:F2}% vs {customStats.EntropyEstimate:F2}%");
-
-        Console.WriteLine($"\nЛучше по автокорреляции (ближе к 0):");
-        double customCorrAbs = Math.Abs(customStats.CorrelationCoefficient);
-        double systemCorrAbs = Math.Abs(systemStats.CorrelationCoefficient);
-        if (customCorrAbs < systemCorrAbs)
-            Console.WriteLine($"  ✓ Кастомный PRNG: {customStats.CorrelationCoefficient:F6} vs {systemStats.CorrelationCoefficient:F6}");
-        else
-            Console.WriteLine($"  ✓ System.Random: {systemStats.CorrelationCoefficient:F6} vs {customStats.CorrelationCoefficient:F6}");
-
-        // Общая оценка
-        double customScore = (customStats.UniformityScore + customStats.EntropyEstimate +
-                            (100 - Math.Abs(customStats.CorrelationCoefficient) * 100)) / 3;
-        double systemScore = (systemStats.UniformityScore + systemStats.EntropyEstimate +
-                            (100 - Math.Abs(systemStats.CorrelationCoefficient) * 100)) / 3;
-
-        Console.WriteLine($"\n🏆 ОБЩАЯ ОЦЕНКА:");
-        Console.WriteLine($"  Кастомный PRNG:  {customScore:F2}/100");
-        Console.WriteLine($"  System.Random:   {systemScore:F2}/100");
-
-        if (customScore > systemScore)
-            Console.WriteLine($"\n✓ ВЫВОД: Кастомный PRNG показывает лучший результат ({customScore - systemScore:F2} баллов)");
-        else if (systemScore > customScore)
-            Console.WriteLine($"\n✓ ВЫВОД: System.Random показывает лучший результат ({systemScore - customScore:F2} баллов)");
-        else
-            Console.WriteLine($"\n✓ ВЫВОД: Оба генератора показывают одинаковое качество");
-    }
-
-    class PerformanceData
+    class PerformanceTrialData
     {
         public int Size { get; set; }
-        public long CustomInsert { get; set; }
-        public long CustomSearch { get; set; }
-        public long CustomDelete { get; set; }
-        public long SystemInsert { get; set; }
-        public long SystemSearch { get; set; }
-        public long SystemDelete { get; set; }
+        public List<long> CustomInsertTimes { get; set; } = new();
+        public List<long> CustomSearchTimes { get; set; } = new();
+        public List<long> CustomDeleteTimes { get; set; } = new();
+        public List<long> SystemInsertTimes { get; set; } = new();
+        public List<long> SystemSearchTimes { get; set; } = new();
+        public List<long> SystemDeleteTimes { get; set; } = new();
+        public List<int> CustomCollisions { get; set; } = new();
+        public List<int> SystemCollisions { get; set; } = new();
+
+        // Средние значения
+        public long CustomInsertAvg => (long)CustomInsertTimes.Average();
+        public long CustomSearchAvg => (long)CustomSearchTimes.Average();
+        public long CustomDeleteAvg => (long)CustomDeleteTimes.Average();
+        public long SystemInsertAvg => (long)SystemInsertTimes.Average();
+        public long SystemSearchAvg => (long)SystemSearchTimes.Average();
+        public long SystemDeleteAvg => (long)SystemDeleteTimes.Average();
+        public double CustomCollisionsAvg => CustomCollisions.Average();
+        public double SystemCollisionsAvg => SystemCollisions.Average();
     }
 
-    static string GeneratePythonPlotScript(List<PerformanceData> data)
+    static string GeneratePythonPlotScript(List<PerformanceTrialData> data)
     {
         var sb = new StringBuilder();
         sb.AppendLine("import matplotlib.pyplot as plt");
@@ -335,189 +85,259 @@ class Program
         sb.AppendLine("]");
 
         sb.AppendLine();
+        sb.AppendLine("# === ПРОИЗВОДИТЕЛЬНОСТЬ ===");
         sb.AppendLine("# Кастомная PRNG");
         sb.Append("custom_insert = [");
-        sb.Append(string.Join(", ", data.Select(d => d.CustomInsert)));
+        sb.Append(string.Join(", ", data.Select(d => d.CustomInsertAvg)));
         sb.AppendLine("]");
 
         sb.Append("custom_search = [");
-        sb.Append(string.Join(", ", data.Select(d => d.CustomSearch)));
+        sb.Append(string.Join(", ", data.Select(d => d.CustomSearchAvg)));
         sb.AppendLine("]");
 
         sb.Append("custom_delete = [");
-        sb.Append(string.Join(", ", data.Select(d => d.CustomDelete)));
+        sb.Append(string.Join(", ", data.Select(d => d.CustomDeleteAvg)));
         sb.AppendLine("]");
 
         sb.AppendLine();
         sb.AppendLine("# System.Random");
         sb.Append("system_insert = [");
-        sb.Append(string.Join(", ", data.Select(d => d.SystemInsert)));
+        sb.Append(string.Join(", ", data.Select(d => d.SystemInsertAvg)));
         sb.AppendLine("]");
 
         sb.Append("system_search = [");
-        sb.Append(string.Join(", ", data.Select(d => d.SystemSearch)));
+        sb.Append(string.Join(", ", data.Select(d => d.SystemSearchAvg)));
         sb.AppendLine("]");
 
         sb.Append("system_delete = [");
-        sb.Append(string.Join(", ", data.Select(d => d.SystemDelete)));
+        sb.Append(string.Join(", ", data.Select(d => d.SystemDeleteAvg)));
         sb.AppendLine("]");
 
         sb.AppendLine();
-        sb.AppendLine("# Создаём фигуру с подграфиками");
-        sb.AppendLine("fig, axes = plt.subplots(1, 3, figsize=(18, 5))");
-        sb.AppendLine("fig.suptitle('Сравнение производительности: Кастомная PRNG vs System.Random', fontsize=16, fontweight='bold')");
+        sb.AppendLine("# === СТАТИСТИКА КОЛЛИЗИЙ ===");
+        sb.Append("custom_collisions = [");
+        sb.Append(string.Join(", ", data.Select(d => d.CustomCollisionsAvg.ToString("0.0").Replace(",", "."))));
+        sb.AppendLine("]");
+
+        sb.Append("system_collisions = [");
+        sb.Append(string.Join(", ", data.Select(d => d.SystemCollisionsAvg.ToString("0.0").Replace(",", "."))));
+        sb.AppendLine("]");
+
+        sb.AppendLine();
+        sb.AppendLine("# Создаём фигуру с подграфиками (2x3)");
+        sb.AppendLine("fig, axes = plt.subplots(2, 3, figsize=(20, 10))");
+        sb.AppendLine("fig.suptitle('Сравнение PRNG: Производительность и Статистика Коллизий', fontsize=18, fontweight='bold')");
         sb.AppendLine();
 
-        // График вставки
+        // Первая строка - производительность
+        sb.AppendLine("# === ПРОИЗВОДИТЕЛЬНОСТЬ ===");
         sb.AppendLine("# График 1: Вставка");
-        sb.AppendLine("axes[0].plot(sizes, custom_insert, 'o-', label='Кастомная PRNG', linewidth=2, markersize=8, color='#2E86AB')");
-        sb.AppendLine("axes[0].plot(sizes, system_insert, 's-', label='System.Random', linewidth=2, markersize=8, color='#A23B72')");
-        sb.AppendLine("axes[0].set_xlabel('Количество элементов', fontsize=12, fontweight='bold')");
-        sb.AppendLine("axes[0].set_ylabel('Время (мс)', fontsize=12, fontweight='bold')");
-        sb.AppendLine("axes[0].set_title('Операция вставки', fontsize=13, fontweight='bold')");
-        sb.AppendLine("axes[0].legend(fontsize=11)");
-        sb.AppendLine("axes[0].grid(True, alpha=0.3)");
-        sb.AppendLine("axes[0].set_xscale('log')");
+        sb.AppendLine("axes[0, 0].plot(sizes, custom_insert, 'o-', label='Кастомная PRNG', linewidth=2.5, markersize=8, color='#2E86AB')");
+        sb.AppendLine("axes[0, 0].plot(sizes, system_insert, 's-', label='System.Random', linewidth=2.5, markersize=8, color='#A23B72')");
+        sb.AppendLine("axes[0, 0].set_xlabel('Количество элементов', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[0, 0].set_ylabel('Время (мс)', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[0, 0].set_title('Операция вставки', fontsize=12, fontweight='bold')");
+        sb.AppendLine("axes[0, 0].legend(fontsize=10, loc='upper left')");
+        sb.AppendLine("axes[0, 0].grid(True, alpha=0.3)");
+        sb.AppendLine("axes[0, 0].set_xscale('log')");
         sb.AppendLine();
 
-        // График поиска
+        // График 2: Поиск
         sb.AppendLine("# График 2: Поиск");
-        sb.AppendLine("axes[1].plot(sizes, custom_search, 'o-', label='Кастомная PRNG', linewidth=2, markersize=8, color='#2E86AB')");
-        sb.AppendLine("axes[1].plot(sizes, system_search, 's-', label='System.Random', linewidth=2, markersize=8, color='#A23B72')");
-        sb.AppendLine("axes[1].set_xlabel('Количество элементов', fontsize=12, fontweight='bold')");
-        sb.AppendLine("axes[1].set_ylabel('Время (мс)', fontsize=12, fontweight='bold')");
-        sb.AppendLine("axes[1].set_title('Операция поиска', fontsize=13, fontweight='bold')");
-        sb.AppendLine("axes[1].legend(fontsize=11)");
-        sb.AppendLine("axes[1].grid(True, alpha=0.3)");
-        sb.AppendLine("axes[1].set_xscale('log')");
+        sb.AppendLine("axes[0, 1].plot(sizes, custom_search, 'o-', label='Кастомная PRNG', linewidth=2.5, markersize=8, color='#2E86AB')");
+        sb.AppendLine("axes[0, 1].plot(sizes, system_search, 's-', label='System.Random', linewidth=2.5, markersize=8, color='#A23B72')");
+        sb.AppendLine("axes[0, 1].set_xlabel('Количество элементов', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[0, 1].set_ylabel('Время (мс)', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[0, 1].set_title('Операция поиска', fontsize=12, fontweight='bold')");
+        sb.AppendLine("axes[0, 1].legend(fontsize=10, loc='upper left')");
+        sb.AppendLine("axes[0, 1].grid(True, alpha=0.3)");
+        sb.AppendLine("axes[0, 1].set_xscale('log')");
         sb.AppendLine();
 
-        // График удаления
+        // График 3: Удаление
         sb.AppendLine("# График 3: Удаление");
-        sb.AppendLine("axes[2].plot(sizes, custom_delete, 'o-', label='Кастомная PRNG', linewidth=2, markersize=8, color='#2E86AB')");
-        sb.AppendLine("axes[2].plot(sizes, system_delete, 's-', label='System.Random', linewidth=2, markersize=8, color='#A23B72')");
-        sb.AppendLine("axes[2].set_xlabel('Количество элементов', fontsize=12, fontweight='bold')");
-        sb.AppendLine("axes[2].set_ylabel('Время (мс)', fontsize=12, fontweight='bold')");
-        sb.AppendLine("axes[2].set_title('Операция удаления', fontsize=13, fontweight='bold')");
-        sb.AppendLine("axes[2].legend(fontsize=11)");
-        sb.AppendLine("axes[2].grid(True, alpha=0.3)");
-        sb.AppendLine("axes[2].set_xscale('log')");
+        sb.AppendLine("axes[0, 2].plot(sizes, custom_delete, 'o-', label='Кастомная PRNG', linewidth=2.5, markersize=8, color='#2E86AB')");
+        sb.AppendLine("axes[0, 2].plot(sizes, system_delete, 's-', label='System.Random', linewidth=2.5, markersize=8, color='#A23B72')");
+        sb.AppendLine("axes[0, 2].set_xlabel('Количество элементов', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[0, 2].set_ylabel('Время (мс)', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[0, 2].set_title('Операция удаления', fontsize=12, fontweight='bold')");
+        sb.AppendLine("axes[0, 2].legend(fontsize=10, loc='upper left')");
+        sb.AppendLine("axes[0, 2].grid(True, alpha=0.3)");
+        sb.AppendLine("axes[0, 2].set_xscale('log')");
+        sb.AppendLine();
+
+        // Вторая строка - коллизии
+        sb.AppendLine("# === СТАТИСТИКА КОЛЛИЗИЙ ===");
+        sb.AppendLine("# График 4: Коллизии (линейный график)");
+        sb.AppendLine("axes[1, 0].plot(sizes, custom_collisions, 'o-', label='Кастомная PRNG', linewidth=2.5, markersize=8, color='#2E86AB')");
+        sb.AppendLine("axes[1, 0].plot(sizes, system_collisions, 's-', label='System.Random', linewidth=2.5, markersize=8, color='#A23B72')");
+        sb.AppendLine("axes[1, 0].set_xlabel('Количество элементов', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[1, 0].set_ylabel('Среднее число коллизий', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[1, 0].set_title('Коллизии (линейная шкала)', fontsize=12, fontweight='bold')");
+        sb.AppendLine("axes[1, 0].legend(fontsize=10, loc='upper left')");
+        sb.AppendLine("axes[1, 0].grid(True, alpha=0.3)");
+        sb.AppendLine();
+
+        // График 5: Коллизии (логарифмическая)
+        sb.AppendLine("# График 5: Коллизии (логарифмическая шкала)");
+        sb.AppendLine("axes[1, 1].semilogy(sizes, custom_collisions, 'o-', label='Кастомная PRNG', linewidth=2.5, markersize=8, color='#2E86AB')");
+        sb.AppendLine("axes[1, 1].semilogy(sizes, system_collisions, 's-', label='System.Random', linewidth=2.5, markersize=8, color='#A23B72')");
+        sb.AppendLine("axes[1, 1].set_xlabel('Количество элементов', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[1, 1].set_ylabel('Среднее число коллизий (log)', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[1, 1].set_title('Коллизии (логарифмическая шкала)', fontsize=12, fontweight='bold')");
+        sb.AppendLine("axes[1, 1].legend(fontsize=10, loc='upper left')");
+        sb.AppendLine("axes[1, 1].grid(True, alpha=0.3)");
+        sb.AppendLine("axes[1, 1].set_xscale('log')");
+        sb.AppendLine();
+
+        // График 6: Сравнение коллизий (столбчатая диаграмма)
+        sb.AppendLine("# График 6: Разница в коллизиях");
+        sb.AppendLine("collisions_diff = [c - s for c, s in zip(custom_collisions, system_collisions)]");
+        sb.AppendLine("colors = ['#2E86AB' if x < 0 else '#A23B72' for x in collisions_diff]");
+        sb.AppendLine("axes[1, 2].bar(range(len(sizes)), collisions_diff, color=colors, alpha=0.7, edgecolor='black')");
+        sb.AppendLine("axes[1, 2].axhline(y=0, color='black', linestyle='-', linewidth=0.8)");
+        sb.AppendLine("axes[1, 2].set_xlabel('Индекс размера данных', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[1, 2].set_ylabel('Разница коллизий', fontsize=11, fontweight='bold')");
+        sb.AppendLine("axes[1, 2].set_title('Разница коллизий (Custom - System)', fontsize=12, fontweight='bold')");
+        sb.AppendLine("axes[1, 2].grid(True, alpha=0.3, axis='y')");
+        sb.AppendLine("axes[1, 2].set_xticks(range(len(sizes)))");
+        sb.AppendLine("axes[1, 2].set_xticklabels(sizes)");
         sb.AppendLine();
 
         sb.AppendLine("plt.tight_layout()");
-        sb.AppendLine("plt.savefig('performance_comparison.png', dpi=300, bbox_inches='tight')");
-        sb.AppendLine("print('График сохранён в файл: performance_comparison.png')");
+        sb.AppendLine("plt.savefig('performance_comparison_detailed.png', dpi=300, bbox_inches='tight')");
+        sb.AppendLine("print('Графики сохранены в файл: performance_comparison_detailed.png')");
         sb.AppendLine("plt.show()");
 
         return sb.ToString();
     }
 
+    class TableStatistics
+    {
+        public long TotalProbes { get; set; }
+        public int Collisions { get; set; }
+    }
+
+    static TableStatistics ExtractTableStats(HashTableWithPRNG table)
+    {
+        var stats = new TableStatistics();
+        // Используем reflection для доступа к приватным полям
+        var type = table.GetType();
+        var totalProbesField = type.GetField("_totalProbes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var collisionsField = type.GetField("_collisions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        if (totalProbesField != null)
+            stats.TotalProbes = (long)totalProbesField.GetValue(table);
+        if (collisionsField != null)
+            stats.Collisions = (int)collisionsField.GetValue(table);
+
+        return stats;
+    }
+
     static void PerformanceComparison()
     {
-        Console.WriteLine("--- СРАВНЕНИЕ ПРОИЗВОДИТЕЛЬНОСТИ ---\n");
-        var sizes = new[] { 1000, 5000, 10000, 20000, 50000, 61967, 68023, 72981, 75490, 91443, 95569, 103595, 106698, 110482, 133590, 156868, 185437, 212942, 249076, 265284, 289052, 342674, 345976, 399854, 495322, 617971, 694525, 811092, 958809, 1000000 };
+        const int TRIALS = 10;
+        Console.WriteLine($"--- СРАВНЕНИЕ ПРОИЗВОДИТЕЛЬНОСТИ (с повторением {TRIALS} раз) ---\n");
+        var sizes = new[] { 1000, 5000, 10000, 50000, 68023, 75490, 91443, 103595, 110482, 133590, 156868, 185437, 212942, 265284, 289052, 342674, 399854, 617971, 811092, 1000000 };
+
 
         Console.WriteLine("=== СРАВНЕНИЕ: Стандартная ГПСЧ vs Кастомная PRNG ===\n");
 
-        var performanceData = new List<PerformanceData>();
+        var performanceData = new List<PerformanceTrialData>();
 
         foreach (var size in sizes)
         {
-            Console.WriteLine($"\n--- Размер данных: {size} ---");
+            Console.WriteLine($"\n--- Размер данных: {size} (повторений: {TRIALS}) ---");
 
-            // Генерируем данные
-            var identifiers = new List<string>();
-            for (int i = 0; i < size; i++)
+            var trialData = new PerformanceTrialData { Size = size };
+
+            for (int trial = 0; trial < TRIALS; trial++)
             {
-                identifiers.Add($"id_{i:D6}");
+                if ((trial + 1) % 20 == 0)
+                    Console.Write($"\r  Прогресс: {trial + 1}/{TRIALS}");
+
+                // Генерируем данные
+                var identifiers = new List<string>();
+                for (int i = 0; i < size; i++)
+                {
+                    identifiers.Add($"id_{i:D6}_{trial}");
+                }
+
+                // ===== КАСТОМНАЯ PRNG =====
+                var hashTableCustom = new HashTableWithPRNG(128, 42 + trial, new PRNG(42 + trial));
+
+                // Вставка
+                var sw = Stopwatch.StartNew();
+                foreach (var id in identifiers)
+                {
+                    hashTableCustom.Insert(new Entry(id) { Kind = "var", Type = "int" });
+                }
+                sw.Stop();
+                trialData.CustomInsertTimes.Add(sw.ElapsedMilliseconds);
+
+                // Поиск
+                sw = Stopwatch.StartNew();
+                foreach (var id in identifiers)
+                {
+                    hashTableCustom.Search(id);
+                }
+                sw.Stop();
+                trialData.CustomSearchTimes.Add(sw.ElapsedMilliseconds);
+
+                // Удаление
+                sw = Stopwatch.StartNew();
+                for (int i = 0; i < size / 2; i++)
+                {
+                    hashTableCustom.Delete($"id_{i:D6}_{trial}");
+                }
+                sw.Stop();
+                trialData.CustomDeleteTimes.Add(sw.ElapsedMilliseconds);
+
+                var customStats = ExtractTableStats(hashTableCustom);
+                trialData.CustomCollisions.Add(customStats.Collisions);
+
+                // ===== SYSTEM.RANDOM =====
+                var hashTableSystem = new HashTableWithPRNG(128, 42 + trial, new SystemRandomAdapter(42 + trial));
+
+                // Вставка
+                sw = Stopwatch.StartNew();
+                foreach (var id in identifiers)
+                {
+                    hashTableSystem.Insert(new Entry(id) { Kind = "var", Type = "int" });
+                }
+                sw.Stop();
+                trialData.SystemInsertTimes.Add(sw.ElapsedMilliseconds);
+
+                // Поиск
+                sw = Stopwatch.StartNew();
+                foreach (var id in identifiers)
+                {
+                    hashTableSystem.Search(id);
+                }
+                sw.Stop();
+                trialData.SystemSearchTimes.Add(sw.ElapsedMilliseconds);
+
+                // Удаление
+                sw = Stopwatch.StartNew();
+                for (int i = 0; i < size / 2; i++)
+                {
+                    hashTableSystem.Delete($"id_{i:D6}_{trial}");
+                }
+                sw.Stop();
+                trialData.SystemDeleteTimes.Add(sw.ElapsedMilliseconds);
+
+                var systemStats = ExtractTableStats(hashTableSystem);
+                trialData.SystemCollisions.Add(systemStats.Collisions);
             }
 
-            // Тест хеш-таблицы с кастомной PRNG
-            Console.WriteLine("\n[Кастомная PRNG]");
-            var hashTableCustom = new HashTableWithPRNG(128, 42, new PRNG(42));
+            Console.WriteLine($"\r  Прогресс: {TRIALS}/{TRIALS}     ");
+            Console.WriteLine($"\n  Результаты ({size} элементов):");
+            Console.WriteLine($"    Вставка:  Custom: {trialData.CustomInsertAvg} мс | System: {trialData.SystemInsertAvg} мс | Ratio: {(double)trialData.CustomInsertAvg / trialData.SystemInsertAvg:F2}x");
+            Console.WriteLine($"    Поиск:    Custom: {trialData.CustomSearchAvg} мс | System: {trialData.SystemSearchAvg} мс | Ratio: {(double)trialData.CustomSearchAvg / trialData.SystemSearchAvg:F2}x");
+            Console.WriteLine($"    Удаление: Custom: {trialData.CustomDeleteAvg} мс | System: {trialData.SystemDeleteAvg} мс | Ratio: {(double)trialData.CustomDeleteAvg / trialData.SystemDeleteAvg:F2}x");
+            Console.WriteLine($"    Коллизии: Custom: {trialData.CustomCollisionsAvg:F1} | System: {trialData.SystemCollisionsAvg:F1} | Разница: {trialData.CustomCollisionsAvg - trialData.SystemCollisionsAvg:F1}");
 
-            var sw1 = Stopwatch.StartNew();
-            foreach (var id in identifiers)
-            {
-                hashTableCustom.Insert(new Entry(id) { Kind = "var", Type = "int" });
-            }
-            sw1.Stop();
-            long customInsertTime = sw1.ElapsedMilliseconds;
-
-            sw1 = Stopwatch.StartNew();
-            foreach (var id in identifiers)
-            {
-                hashTableCustom.Search(id);
-            }
-            sw1.Stop();
-            long customSearchTime = sw1.ElapsedMilliseconds;
-
-            // Удаление половины элементов
-            sw1 = Stopwatch.StartNew();
-            for (int i = 0; i < size / 2; i++)
-            {
-                hashTableCustom.Delete($"id_{i:D6}");
-            }
-            sw1.Stop();
-            long customDeleteTime = sw1.ElapsedMilliseconds;
-
-            Console.WriteLine($"  Вставка:  {customInsertTime} мс");
-            Console.WriteLine($"  Поиск:    {customSearchTime} мс");
-            Console.WriteLine($"  Удаление: {customDeleteTime} мс");
-
-            // Тест хеш-таблицы со стандартной ГПСЧ
-            Console.WriteLine("\n[Стандартная System.Random]");
-            var hashTableSystem = new HashTableWithPRNG(128, 42, new SystemRandomAdapter(42));
-
-            sw1 = Stopwatch.StartNew();
-            foreach (var id in identifiers)
-            {
-                hashTableSystem.Insert(new Entry(id) { Kind = "var", Type = "int" });
-            }
-            sw1.Stop();
-            long systemInsertTime = sw1.ElapsedMilliseconds;
-
-            sw1 = Stopwatch.StartNew();
-            foreach (var id in identifiers)
-            {
-                hashTableSystem.Search(id);
-            }
-            sw1.Stop();
-            long systemSearchTime = sw1.ElapsedMilliseconds;
-
-            // Удаление половины элементов
-            sw1 = Stopwatch.StartNew();
-            for (int i = 0; i < size / 2; i++)
-            {
-                hashTableSystem.Delete($"id_{i:D6}");
-            }
-            sw1.Stop();
-            long systemDeleteTime = sw1.ElapsedMilliseconds;
-
-            Console.WriteLine($"  Вставка:  {systemInsertTime} мс");
-            Console.WriteLine($"  Поиск:    {systemSearchTime} мс");
-            Console.WriteLine($"  Удаление: {systemDeleteTime} мс");
-
-            // Выводим результаты сравнения
-            Console.WriteLine($"\n[Результаты сравнения]");
-            double insertRatio = systemInsertTime > 0 ? (double)customInsertTime / systemInsertTime : 1.0;
-            double searchRatio = systemSearchTime > 0 ? (double)customSearchTime / systemSearchTime : 1.0;
-            double deleteRatio = systemDeleteTime > 0 ? (double)customDeleteTime / systemDeleteTime : 1.0;
-
-            Console.WriteLine($"  Вставка:  {insertRatio:F2}x (кастомная / система)");
-            Console.WriteLine($"  Поиск:    {searchRatio:F2}x (кастомная / система)");
-            Console.WriteLine($"  Удаление: {deleteRatio:F2}x (кастомная / система)");
-
-            performanceData.Add(new PerformanceData
-            {
-                Size = size,
-                CustomInsert = customInsertTime,
-                CustomSearch = customSearchTime,
-                CustomDelete = customDeleteTime,
-                SystemInsert = systemInsertTime,
-                SystemSearch = systemSearchTime,
-                SystemDelete = systemDeleteTime
-            });
+            performanceData.Add(trialData);
         }
 
         // Генерируем Python скрипт
@@ -529,9 +349,9 @@ class Program
         Console.WriteLine("\nДля построения графика выполните в консоли:");
         Console.WriteLine($"  python {scriptPath}");
         Console.WriteLine("\nИли скопируйте и выполните следующий Python код:");
-        Console.WriteLine("\n" + new string('=', 80));
+        Console.WriteLine("\n" + new string('=', 100));
         Console.WriteLine(pythonScript);
-        Console.WriteLine(new string('=', 80));
+        Console.WriteLine(new string('=', 100));
     }
 
     static IIdentifierTable SelectTable()
@@ -691,15 +511,11 @@ class Program
 
     static void Main(string[] args)
     {
+        PRNG rng = new PRNG();
+        rng.DumpOneMillion("rng_samples.txt");
         Console.WriteLine("=== Лабораторная работа: Таблица идентификаторов ===\n");
 
-        // Сравнение качества генераторов
-        ComparePRNGGenerators();
-
-        Console.WriteLine("\n\nНажмите Enter для сравнения производительности...");
-        Console.ReadLine();
-
-        // Сравнение производительности
+        // Сравнение производительности с повторениями
         PerformanceComparison();
 
         // Затем переходим в интерактивный режим
